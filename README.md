@@ -97,14 +97,14 @@ Just ask any of the developers at www.ielectrify.com or www.fahdmurtaza.com
 
 **Changelog**
 
-####1.0
+#### 1.0
 * Plugin Release. (01/12/12)
 
 **Upgrade Notice**
 
-####1.0
+#### 1.0
 
 No reason, simply install if you need and enjoy :)
 
-####1.1
+#### 1.1
 Simpy update if you need the latest code. No functional changes. Just new tags added for repo search ease.
