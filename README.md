@@ -1,16 +1,16 @@
-#Custom Avatars for Wordpress
+# Custom Avatars for Wordpress
 
-	Contributors:  sherice, fahdi
-	Tags: custom, avatar, random, new, fresh, avatars, comments, form, comment
-	Requires at least: 3.3
-	Tested up to: 3.3
-	Stable tag: 1.1
+Contributors:  sherice, fahdi
+Tags: custom, avatar, random, new, fresh, avatars, comments, form, comment
+Requires at least: 3.3
+Tested up to: 4.2
+Stable tag: 1.1
 
 This plugin will give visitors an
 avatar theme of your choice if they don't have a Gravatar
 
 
-##Description
+## Description
 
 This plugin will give visitors an avatar theme of your choice if they don't have a Gravatar. Its a plugin developed by <a href="http://ielectrify.com">iElectrify</a> and <a href="http://www.fahdmurtaza.com">Fahd Murtaza</a>
 
@@ -24,16 +24,16 @@ Icons should be sized at 48x48 pixels. You can use a free graphics viewer/resize
 When you have your icons, just add them to the wp-randomavatars/images folder in your Wordpress plugins area. That's it! Enjoy!
 
 
-##Features:
+## Features:
 Allow your visitors to
 * Use custom random avatars instead of the default gravatars i.e "Mystery Man" avatar we see everywhere. 
 
-##Troubleshooting:
+## Troubleshooting:
 * Please let me know if you run into any issues with this plugin by sending an email to info@fahdmurtaza.com or simply post on wordpress forum for this plugin.
 
-##Installation:
+## Installation:
 
-###If you downloaded this plugin:
+### If you downloaded this plugin:
 
 Thank You for Downloading Custom Avatars for Wordpress. This plugin will give visitors an
 avatar theme of your choice if they don't have a Gravatar
@@ -43,7 +43,9 @@ avatar theme of your choice if they don't have a Gravatar
 If your Wordpress theme does not support avatars (rare), simply add this snippet of code
 where you want the avatars to appear:
 
-`<?php get_avatar(); ?>`
+```
+<?php get_avatar(); ?>
+```
 
 Icons should be sized at 48x48 pixels. You can use a free graphics viewer/resizer such as Irfanview at www.irfanview.com to do this.  To find themed icons for your blog, many of which are free for personal and commercial use, see www.iconfinder.net.
 
@@ -64,19 +66,21 @@ When you have your icons, just add them to the wp-randomavatars/images folder in
 If your Wordpress theme does not support avatars (rare), simply add this snippet of code
 where you want the avatars to appear:
 
-`<?php get_avatar(); ?>`
+```
+<?php get_avatar(); ?>
+```
 
 Icons should be sized at 48x48 pixels. You can use a free graphics viewer/resizer such as Irfanview at www.irfanview.com to do this.  To find themed icons for your blog, many of which are free for personal and commercial use, see www.iconfinder.net.
 
 When you have your icons, just add them to the wp-randomavatars/images folder in your Wordpress plugins area. That's it! Enjoy!
 
-##Screenshots
+## Screenshots
 
 1. Shows the random gravatar. 
 
 ![Shows the random gravatar.](Screenshot-1.png)
 
-###FAQs
+### FAQs
 
 **How does it work? =**
 
