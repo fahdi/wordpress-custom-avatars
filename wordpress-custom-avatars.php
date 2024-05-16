@@ -15,35 +15,33 @@ Version: 1.1
  * @return bool True if a valid Gravatar exists, false otherwise.
  */
 function validate_gravatar($email) {
-    $uri = 'http://www.gravatar.com/avatar.php?gravatar_id=' . md5($email) . '?&default=identicon&r=any&size=80';
-    $headers = wp_get_http_headers($uri);
+    $uri = 'https://www.gravatar.com/avatar/' . md5(strtolower(trim($email))) . '?d=404';
+    $response = wp_remote_head($uri);
 
-    // Check the headers
-    if (!is_array($headers)) {
+    if (is_wp_error($response)) {
         return false;
     }
 
-    return isset($headers["content-disposition"]);
+    $http_code = wp_remote_retrieve_response_code($response);
+    return $http_code == 200;
 }
 
 /**
  * Get a random image from the /images/ directory.
  *
- * @return string Random image filename.
+ * @return string|null Random image filename or null if none found.
  */
-function getImagesFromDir() {
-    $imagesDir = dirname(__FILE__) . '/images/';
-    if ($handle = opendir($imagesDir)) {
-        $dirArray = [];
-        while (false !== ($file = readdir($handle))) {
-            if ($file != "." && $file != "..") {
-                $dirArray[] = $file;
-            }
-        }
-        closedir($handle);
-        return $dirArray[array_rand($dirArray)];
+function get_random_image() {
+    $images_dir = plugin_dir_path(__FILE__) . 'images/';
+    $images_url = plugin_dir_url(__FILE__) . 'images/';
+    $images = array_diff(scandir($images_dir), array('..', '.'));
+
+    if (empty($images)) {
+        return null;
     }
-    return null;
+
+    $random_image = $images[array_rand($images)];
+    return $images_url . $random_image;
 }
 
 /**
@@ -78,16 +76,15 @@ function wavatar_comment_author($args) {
     // Validate if the comment author has a Gravatar
     if (!validate_gravatar($comment->comment_author_email)) {
         // Parse attributes to get necessary details
-        $attr = parse_attributes($args);
+        $width = parse_attributes($args) ?: 48; // Default width to 48 if not provided
 
-        // Logic to display custom avatar
-        // For example, display a random image from the images directory
-        $custom_avatar = getImagesFromDir();
-        if ($custom_avatar) {
-            echo '<img src="' . plugins_url('images/' . $custom_avatar, __FILE__) . '" alt="Custom Avatar" width="' . $attr . '" />';
+        // Get random custom avatar
+        $custom_avatar_url = get_random_image();
+        if ($custom_avatar_url) {
+            echo '<img src="' . esc_url($custom_avatar_url) . '" alt="Custom Avatar" width="' . esc_attr($width) . '" />';
         } else {
-            // Fallback if no custom images are available
-            echo '<img src="' . plugins_url('images/default-avatar.png', __FILE__) . '" alt="Default Avatar" width="' . $attr . '" />';
+            // Fallback to default avatar if no custom images are available
+            echo '<img src="' . esc_url(plugin_dir_url(__FILE__) . 'images/default-avatar.png') . '" alt="Default Avatar" width="' . esc_attr($width) . '" />';
         }
     }
 }
