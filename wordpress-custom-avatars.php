@@ -1,112 +1,94 @@
 <?php
-/**
- * Plugin Name: Custom Avatars
- * Plugin URI: https://wordpress.org/plugins/wordpress-custom-avatars-plugin/
- * Description: Give your WordPress blog custom avatars for users if they're not already using Gravatar. Created by <a href="https://www.ielectrify.com">iElectrify</a> and <a href="https://www.fahdmurtaza.com">Fahd Murtaza</a>
- * Author: Sherice Jacob & Fahad Murtaza
- * Author URI: http://www.ielectrify.com
- * Version: 1.2
- */
-
-if (!defined('ABSPATH')) {
-	exit; // Exit if accessed directly.
-}
+/*
+Plugin Name: Custom Avatars
+Plugin URI: http://www.ielectrify.com/resources/bloggingtips/custom-wordpress-avatars/
+Description: Give your WordPress blog custom avatars for users if they're not already using Gravatar. Created by <a href="http://www.ielectrify.com">iElectrify</a> and <a href="http://www.fahdmurtaza.com">Fahd Murtaza</a>
+Author: Sherice Jacob & Fahd Murtaza
+Author URI: http://www.ielectrify.com
+Version: 1.1
+*/
 
 /**
- * Pre-2.6 compatibility
+ * Validate if an email has a Gravatar.
+ *
+ * @param string $email Email address to check.
+ * @return bool True if a valid Gravatar exists, false otherwise.
  */
-if (!defined('WP_CONTENT_URL')) {
-	define('WP_CONTENT_URL', get_option('siteurl') . '/wp-content');
-}
-if (!defined('WP_CONTENT_DIR')) {
-	define('WP_CONTENT_DIR', ABSPATH . 'wp-content');
-}
-if (!defined('WP_PLUGIN_URL')) {
-	define('WP_PLUGIN_URL', WP_CONTENT_URL . '/plugins');
-}
-if (!defined('WP_PLUGIN_DIR')) {
-	define('WP_PLUGIN_DIR', WP_CONTENT_DIR . '/plugins');
+function validate_gravatar($email) {
+    $uri = 'http://www.gravatar.com/avatar.php?gravatar_id=' . md5($email) . '?&default=identicon&r=any&size=80';
+    $headers = wp_get_http_headers($uri);
+
+    // Check the headers
+    if (!is_array($headers)) {
+        return false;
+    }
+
+    return isset($headers["content-disposition"]);
 }
 
 /**
- * Validate Gravatar
+ * Get a random image from the /images/ directory.
  *
- * @param string $wpca_email User email.
- *
- * @return bool Whether the Gravatar is valid or not.
+ * @return string Random image filename.
  */
-function wpca_validate_gravatar($wpca_email)
-{
-	$wpca_uri = 'https://www.gravatar.com/avatar.php?gravatar_id=' . md5($wpca_email) . '?&default=identicon&r=any&size=80';
-	$wpca_headers = wp_remote_head($wpca_uri);
-
-	if (is_wp_error($wpca_headers) || !isset($wpca_headers['response']) || $wpca_headers['response']['code'] !== 200) {
-		return false;
-	}
-
-	return true;
+function getImagesFromDir() {
+    $imagesDir = dirname(__FILE__) . '/images/';
+    if ($handle = opendir($imagesDir)) {
+        $dirArray = [];
+        while (false !== ($file = readdir($handle))) {
+            if ($file != "." && $file != "..") {
+                $dirArray[] = $file;
+            }
+        }
+        closedir($handle);
+        return $dirArray[array_rand($dirArray)];
+    }
+    return null;
 }
 
 /**
- * Get Images from Directory
+ * Parse attributes from a given input string.
  *
- * @return string Randomly selected image from the directory.
+ * @param string $input XML string containing attributes.
+ * @return string|null Value of the "width" attribute, or null if not found.
  */
-function wpca_get_images_from_dir()
-{
-	$wpca_dir_path = plugin_dir_path(__FILE__) . 'images/';
-	$wpca_dir_array = [];
-
-	if ($wpca_handle = opendir($wpca_dir_path)) {
-		while (false !== ($wpca_file = readdir($wpca_handle))) {
-			if ($wpca_file != "." && $wpca_file != "..") {
-				$wpca_dir_array[] = $wpca_file;
-			}
-		}
-		closedir($wpca_handle);
-	}
-
-	return $wpca_dir_array[array_rand($wpca_dir_array)];
+function parse_attributes($input) {
+    $attr = simplexml_load_string($input);
+    foreach ($attr->attributes() as $a => $b) {
+        if ($a == "width") {
+            return (string) $b;
+        }
+    }
+    return null;
 }
 
 /**
- * Parse Attributes
+ * Display custom avatar for comment authors if Gravatar is not available.
  *
- * @param string $wpca_input Attributes input.
- *
- * @return string Attribute value.
+ * @param string $args Arguments containing HTML attributes.
  */
-function wpca_parse_attributes($wpca_input)
-{
-	$wpca_attr = simplexml_load_string($wpca_input);
-	foreach ($wpca_attr->attributes() as $wpca_a => $wpca_b) {
-		if ($wpca_a == "width") {
-			return $wpca_b;
-		}
-	}
-	return '';
+function wavatar_comment_author($args) {
+    global $comment;
+
+    // Ensure the global $comment object is available and valid
+    if (!isset($comment) || !is_object($comment) || !isset($comment->comment_author_email)) {
+        return;
+    }
+
+    // Validate if the comment author has a Gravatar
+    if (!validate_gravatar($comment->comment_author_email)) {
+        // Parse attributes to get necessary details
+        $attr = parse_attributes($args);
+
+        // Logic to display custom avatar
+        // For example, display a random image from the images directory
+        $custom_avatar = getImagesFromDir();
+        if ($custom_avatar) {
+            echo '<img src="' . plugins_url('images/' . $custom_avatar, __FILE__) . '" alt="Custom Avatar" width="' . $attr . '" />';
+        } else {
+            // Fallback if no custom images are available
+            echo '<img src="' . plugins_url('images/default-avatar.png', __FILE__) . '" alt="Default Avatar" width="' . $attr . '" />';
+        }
+    }
 }
-
-/**
- * Modify Comment Author Avatar
- *
- * @param string $wpca_args Avatar arguments.
- *
- * @return string Modified avatar HTML.
- */
-function wpca_wavatar_comment_author($wpca_args)
-{
-	global $comment;
-
-	if (!wpca_validate_gravatar($comment->comment_author_email)) {
-		$wpca_attr = wpca_parse_attributes($wpca_args);
-
-		$wpca_image_url = WP_PLUGIN_URL . '/custom-avatars-plugin/images/' . wpca_get_images_from_dir();
-		$wpca_img_html = "<img class='wavatar' src='{$wpca_image_url}' width='{$wpca_attr}' height='{$wpca_attr}' alt='Favatar' />";
-		return $wpca_img_html;
-	} else {
-		return $wpca_args;
-	}
-}
-
-add_filter('get_avatar', 'wpca_wavatar_comment_author', 10, 3);
+?>
