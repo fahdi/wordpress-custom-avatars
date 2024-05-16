@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: Custom Avatars
-Plugin URI: http://www.ielectrify.com/resources/bloggingtips/custom-wordpress-avatars/
+Plugin URI: https://wordpress.org/plugins/wordpress-custom-avatars-plugin/
 Description: Give your WordPress blog custom avatars for users if they're not already using Gravatar. Created by <a href="http://www.ielectrify.com">iElectrify</a> and <a href="http://www.fahdmurtaza.com">Fahd Murtaza</a>
 Author: Sherice Jacob & Fahd Murtaza
 Author URI: http://www.ielectrify.com
