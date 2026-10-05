@@ -5,7 +5,7 @@ Plugin URI: https://wordpress.org/plugins/wordpress-custom-avatars-plugin/
 Description: Give your WordPress blog custom avatars for users if they're not already using Gravatar. Created by <a href="http://www.ielectrify.com">iElectrify</a> and <a href="http://www.fahdmurtaza.com">Fahd Murtaza</a>
 Author: Sherice Jacob & Fahd Murtaza
 Author URI: http://www.ielectrify.com
-Version: 1.2
+Version: 1.3
 */
 
 /**
@@ -27,10 +27,45 @@ function custom_avatars_add_admin_menu() {
 add_action('admin_menu', 'custom_avatars_add_admin_menu');
 
 /**
+ * Options merged with defaults so callers never hit undefined keys.
+ *
+ * @return array{custom_avatars_default_avatar:string,custom_avatars_avatar_size:int}
+ */
+function custom_avatars_get_options() {
+    $options = get_option('custom_avatars_settings');
+    if (!is_array($options)) {
+        $options = array();
+    }
+    return wp_parse_args($options, array(
+        'custom_avatars_default_avatar' => '',
+        'custom_avatars_avatar_size'    => 48,
+    ));
+}
+
+/**
+ * Sanitize settings on save.
+ *
+ * @param mixed $input
+ * @return array
+ */
+function custom_avatars_sanitize_settings($input) {
+    $input = is_array($input) ? $input : array();
+    $size  = isset($input['custom_avatars_avatar_size']) ? absint($input['custom_avatars_avatar_size']) : 48;
+    return array(
+        'custom_avatars_default_avatar' => isset($input['custom_avatars_default_avatar']) ? esc_url_raw(trim((string) $input['custom_avatars_default_avatar'])) : '',
+        'custom_avatars_avatar_size'    => min(512, max(16, $size)),
+    );
+}
+
+/**
  * Register settings
  */
 function custom_avatars_settings_init() {
-    register_setting('customAvatars', 'custom_avatars_settings');
+    register_setting('customAvatars', 'custom_avatars_settings', array(
+        'type'              => 'array',
+        'sanitize_callback' => 'custom_avatars_sanitize_settings',
+        'default'           => array(),
+    ));
 
     add_settings_section(
         'custom_avatars_customAvatars_section',
@@ -61,9 +96,9 @@ add_action('admin_init', 'custom_avatars_settings_init');
  * Render default avatar field
  */
 function custom_avatars_default_avatar_render() {
-    $options = get_option('custom_avatars_settings');
+    $options = custom_avatars_get_options();
     ?>
-    <input type='text' name='custom_avatars_settings[custom_avatars_default_avatar]' value='<?php echo $options['custom_avatars_default_avatar']; ?>'>
+    <input type='url' class='regular-text' name='custom_avatars_settings[custom_avatars_default_avatar]' value='<?php echo esc_attr($options['custom_avatars_default_avatar']); ?>'>
     <p>Enter the URL of the default avatar image.</p>
     <?php
 }
@@ -72,9 +107,9 @@ function custom_avatars_default_avatar_render() {
  * Render avatar size field
  */
 function custom_avatars_avatar_size_render() {
-    $options = get_option('custom_avatars_settings');
+    $options = custom_avatars_get_options();
     ?>
-    <input type='number' name='custom_avatars_settings[custom_avatars_avatar_size]' value='<?php echo $options['custom_avatars_avatar_size']; ?>' min="16" max="512">
+    <input type='number' name='custom_avatars_settings[custom_avatars_avatar_size]' value='<?php echo esc_attr($options['custom_avatars_avatar_size']); ?>' min="16" max="512">
     <p>Enter the size of the avatars in pixels.</p>
     <?php
 }
@@ -83,7 +118,7 @@ function custom_avatars_avatar_size_render() {
  * Settings section callback
  */
 function custom_avatars_settings_section_callback() {
-    echo __('Configure the settings for the Custom Avatars plugin.', 'customAvatars');
+    echo esc_html__('Configure the settings for the Custom Avatars plugin.', 'customAvatars');
 }
 
 /**
@@ -103,84 +138,130 @@ function custom_avatars_options_page() {
 }
 
 /**
- * Validate if an email has a Gravatar.
+ * Validate if an email has a Gravatar. Result is cached for a day per address
+ * so a comment thread does not fire one HTTP request per avatar.
  *
  * @param string $email Email address to check.
  * @return bool True if a valid Gravatar exists, false otherwise.
  */
 function validate_gravatar($email) {
-    $uri = 'https://www.gravatar.com/avatar/' . md5(strtolower(trim($email))) . '?d=404';
-    $response = wp_remote_head($uri);
+    $hash = md5(strtolower(trim((string) $email)));
+    $key  = 'custom_avatars_grav_' . $hash;
 
-    if (is_wp_error($response)) {
-        return false;
+    $cached = get_transient($key);
+    if ($cached !== false) {
+        return $cached === 'yes';
     }
 
-    $http_code = wp_remote_retrieve_response_code($response);
-    return $http_code == 200;
+    $response = wp_remote_head('https://www.gravatar.com/avatar/' . $hash . '?d=404', array('timeout' => 3));
+    $has      = !is_wp_error($response) && (int) wp_remote_retrieve_response_code($response) === 200;
+
+    set_transient($key, $has ? 'yes' : 'no', DAY_IN_SECONDS);
+
+    return $has;
 }
 
 /**
- * Get a random image from the /images/ directory.
+ * Get a random image URL from the plugin's /images/ directory.
  *
- * @return string|null Random image filename or null if none found.
+ * Only real image files are returned (no .DS_Store, index.php, ...). The
+ * listing is cached per request.
+ *
+ * @return string|null Random image URL or null if none found.
  */
 function get_random_image() {
-    $images_dir = plugin_dir_path(__FILE__) . 'images/';
-    $images_url = plugin_dir_url(__FILE__) . 'images/';
-    $images = array_diff(scandir($images_dir), array('..', '.'));
+    static $images = null;
+
+    if ($images === null) {
+        $images_dir = plugin_dir_path(__FILE__) . 'images/';
+        $files      = is_dir($images_dir) ? scandir($images_dir) : array();
+        $images     = array();
+        foreach ((array) $files as $file) {
+            if (preg_match('/\.(png|jpe?g|gif|webp)$/i', $file) && is_file($images_dir . $file)) {
+                $images[] = $file;
+            }
+        }
+    }
 
     if (empty($images)) {
         return null;
     }
 
-    $random_image = $images[array_rand($images)];
-    return $images_url . $random_image;
+    return plugin_dir_url(__FILE__) . 'images/' . $images[array_rand($images)];
 }
 
 /**
- * Parse attributes from a given input string.
+ * Pick the custom avatar URL for a user/email that has no Gravatar.
  *
- * @param string $input XML string containing attributes.
- * @return string|null Value of the "width" attribute, or null if not found.
+ * @return string
  */
-function parse_attributes($input) {
-    $attr = simplexml_load_string($input);
-    foreach ($attr->attributes() as $a => $b) {
-        if ($a == "width") {
-            return (string) $b;
-        }
+function custom_avatars_fallback_url() {
+    $options = custom_avatars_get_options();
+    $random  = get_random_image();
+    if ($random) {
+        return $random;
     }
-    return null;
+    if (!empty($options['custom_avatars_default_avatar'])) {
+        return $options['custom_avatars_default_avatar'];
+    }
+    return plugin_dir_url(__FILE__) . 'images/default-avatar.png';
 }
 
 /**
- * Display custom avatar for comment authors if Gravatar is not available.
+ * Resolve an email address from whatever get_avatar() was handed.
  *
- * @param string $args Arguments containing HTML attributes.
+ * @param mixed $id_or_email
+ * @return string
  */
-function wavatar_comment_author($args) {
-    global $comment;
-    $options = get_option('custom_avatars_settings');
-
-    // Ensure the global $comment object is available and valid
-    if (!isset($comment) || !is_object($comment) || !isset($comment->comment_author_email)) {
-        return;
-    }
-
-    // Validate if the comment author has a Gravatar
-    if (!validate_gravatar($comment->comment_author_email)) {
-        // Parse attributes to get necessary details
-        $width = parse_attributes($args) ?: ($options['custom_avatars_avatar_size'] ?: 48); // Default width to 48 if not provided
-
-        // Get random custom avatar
-        $custom_avatar_url = get_random_image();
-        if ($custom_avatar_url) {
-            echo '<img src="' . esc_url($custom_avatar_url) . '" alt="Custom Avatar" width="' . esc_attr($width) . '" />';
-        } else {
-            // Fallback to user-defined default avatar image or a built-in default
-            $default_avatar = $options['custom_avatars_default_avatar'] ?: plugin_dir_url(__FILE__) . 'images/default-avatar.png';
-            echo '<img src="' . esc_url($default_avatar) . '" alt="Default Avatar" width="' . esc_attr($width) . '" />';
+function custom_avatars_email_from($id_or_email) {
+    if ($id_or_email instanceof WP_Comment) {
+        if (!empty($id_or_email->user_id)) {
+            $user = get_user_by('id', (int) $id_or_email->user_id);
+            if ($user) {
+                return $user->user_email;
+            }
         }
+        return (string) $id_or_email->comment_author_email;
     }
+    if ($id_or_email instanceof WP_User) {
+        return $id_or_email->user_email;
+    }
+    if ($id_or_email instanceof WP_Post) {
+        $user = get_user_by('id', (int) $id_or_email->post_author);
+        return $user ? $user->user_email : '';
+    }
+    if (is_numeric($id_or_email)) {
+        $user = get_user_by('id', (int) $id_or_email);
+        return $user ? $user->user_email : '';
+    }
+    return is_string($id_or_email) ? $id_or_email : '';
 }
+
+/**
+ * Replace the avatar URL with a custom image when the address has no Gravatar.
+ *
+ * Hooked to pre_get_avatar_data so every get_avatar()/get_avatar_url() caller
+ * (comments, admin bar, author boxes, REST) gets the same result.
+ *
+ * @param array $args
+ * @param mixed $id_or_email
+ * @return array
+ */
+function custom_avatars_pre_get_avatar_data($args, $id_or_email) {
+    $email = custom_avatars_email_from($id_or_email);
+    if (!is_email($email)) {
+        return $args;
+    }
+
+    if (validate_gravatar($email)) {
+        return $args;
+    }
+
+    $options      = custom_avatars_get_options();
+    $args['url']  = custom_avatars_fallback_url();
+    $args['size'] = !empty($args['size']) ? (int) $args['size'] : (int) $options['custom_avatars_avatar_size'];
+    $args['found_avatar'] = true;
+
+    return $args;
+}
+add_filter('pre_get_avatar_data', 'custom_avatars_pre_get_avatar_data', 10, 2);
